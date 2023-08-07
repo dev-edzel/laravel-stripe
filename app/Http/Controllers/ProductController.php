@@ -4,7 +4,10 @@ namespace App\Http\Controllers;
 
 use App\Models\Order;
 use App\Models\Product;
+use Exception;
+use http\Env\Response;
 use Illuminate\Http\Request;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 class ProductController extends Controller
 {
@@ -16,7 +19,7 @@ class ProductController extends Controller
 
     public function checkout()
     {
-        \Stripe\Stripe::setApiKey(env('STRIPE_SECRET_KEY'));
+        \Stripe\Stripe::setApiKey('sk_test_51NcJkhFJK6oGjToujz6HzEokn7KwX4SPb2XPytLXjnrTDoZxbrofsOZmcjfgkh1mAnGmSiuLMaJgByYAW1okEgEj00rjXzjmRl');
 
         $products = Product::all();
         $lineItems = [];
@@ -51,9 +54,32 @@ class ProductController extends Controller
         return redirect($session->url);
     }
 
-    public function success()
+    public function success(Request $request)
     {
-        return view('product.checkout-success');
+        \Stripe\Stripe::setApiKey('sk_test_51NcJkhFJK6oGjToujz6HzEokn7KwX4SPb2XPytLXjnrTDoZxbrofsOZmcjfgkh1mAnGmSiuLMaJgByYAW1okEgEj00rjXzjmRl');
+        $sessionId = $request->get('session_id');
+
+        try {
+            $session = \Stripe\Checkout\Session::retrieve($sessionId);
+            if (!$session) {
+                throw new NotFoundHttpException;
+            }
+            $customer = \Stripe\Customer::retrieve($session->customer);
+
+            $order = Order::where('session_id', $session->id)->first();
+            if (!$order) {
+                throw new NotFoundHttpException();
+            }
+            if ($order->status === 'unpaid') {
+                $order->status = 'paid';
+                $order->save();
+            }
+
+            return view('product.checkout-success', compact('customer'));
+        } catch (Exception $e) {
+            throw new NotFoundHttpException();
+        }
+
     }
 
     public function cancel()

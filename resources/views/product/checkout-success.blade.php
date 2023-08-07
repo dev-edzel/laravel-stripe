@@ -8,5 +8,7 @@
     </head>
     <body class="antialiased">
         <h1> SUCCESS! </h1>
+        <p>{{ $customer->name }}</p>
     </body>
 </html>
+ 
