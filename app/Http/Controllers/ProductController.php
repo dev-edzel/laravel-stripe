@@ -4,8 +4,9 @@ namespace App\Http\Controllers;
 
 use App\Models\Order;
 use App\Models\Product;
-use http\Env\Response;
+use Exception;
 use Illuminate\Http\Request;
+use Stripe\Customer;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 class ProductController extends Controller
@@ -64,9 +65,17 @@ class ProductController extends Controller
             if (!$session) {
                 throw new NotFoundHttpException;
             }
-            $customer = \Stripe\Customer::retrieve($session->customer);
+
+            $customer = null;
+            if ($session->customer) {
+                $customer = \Stripe\Customer::retrieve($session->customer);
+                if (!$customer) {
+                    throw new NotFoundHttpException;
+                }
+            }
 
             $order = Order::where('session_id', $session->id)->first();
+
             if (!$order) {
                 throw new NotFoundHttpException();
             }
@@ -76,10 +85,10 @@ class ProductController extends Controller
             }
 
             return view('product.checkout-success', compact('customer'));
-        } catch (\Exception $e) {
+        } catch (Exception $e) {
+            // You can log the error here for debugging purposes
             throw new NotFoundHttpException();
         }
-
     }
 
     public function cancel()
@@ -87,9 +96,9 @@ class ProductController extends Controller
 
     }
 
+
     public function webhook()
     {
-        // This is your Stripe CLI webhook secret for testing your endpoint locally.
         $endpoint_secret = ("whsec_4e2407f0748e1b1b77050897d5ca7da0af7674e88b75f21a73ebe072c1daa8fa");
 
         $payload = @file_get_contents('php://input');
@@ -101,14 +110,11 @@ class ProductController extends Controller
                 $payload, $sig_header, $endpoint_secret
             );
         } catch (\UnexpectedValueException $e) {
-            // Invalid payload
             return response('', 400);
         } catch (\Stripe\Exception\SignatureVerificationException $e) {
-            // Invalid signature
             return response('', 400);
         }
 
-// Handle the event
         switch ($event->type) {
             case 'checkout.session.completed':
                 $session = $event->data->object;
@@ -117,10 +123,7 @@ class ProductController extends Controller
                 if ($order && $order->status === 'unpaid') {
                     $order->status = 'paid';
                     $order->save();
-                    // Send email to customer
                 }
-
-            // ... handle other event types
             default:
                 echo 'Received unknown event type ' . $event->type;
         }
